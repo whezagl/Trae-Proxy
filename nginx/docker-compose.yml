@@ -1,0 +1,31 @@
+name: nginx # nginx_default - standard docker compose
+
+networks:
+  bridges: # nginx_bridges
+    driver: bridge
+
+services:
+  nginx:
+    image: jc21/nginx-proxy-manager:2.12.6
+    container_name: nginx
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+    networks:
+      - bridges
+      - default
+    ports:
+      - 80:80
+      - 81:81
+      - 443:443
+    volumes:
+      - ./conf/authentik:/authentik
+      - ./conf/supabase_proxy.conf:/etc/nginx/conf.d/supabase_proxy.conf
+      - ./conf/school_erp_proxy.conf:/etc/nginx/conf.d/school_erp_proxy.conf
+      - ${STORAGE:-./storage}/nginx:/data
+      - ${STORAGE:-./storage}/nginx/letsencrypt:/etc/letsencrypt
+      - ${STORAGE:-./storage}/nginx/letsencrypt-log:/tmp/letsencrypt-log
