@@ -1,7 +1,16 @@
+name: trae-proxy
+
+networks:
+  nginx_bridges:
+    external: true
+
 services:
   trae-proxy:
     image: vuldocker/trae-proxy:latest
     container_name: trae-proxy
+    networks:
+      - nginx_bridges
+      - default
     ports:
       - "443:443"
     volumes:
