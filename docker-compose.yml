@@ -15,7 +15,7 @@ services:
       - nginx_bridges
       - default
     ports:
-      - "127.0.0.1:8443:8443"  # Internal only - accessible from localhost for Nginx proxy
+      - "8443:8443"  # Internal port - accessible from NPM via Docker network
     volumes:
       - ./ca:/app/ca
       - ./config.yaml:/app/config.yaml

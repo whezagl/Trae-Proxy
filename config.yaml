@@ -7,6 +7,12 @@ domain: api.openai.com
 
 # Backend API configuration list
 apis:
+  - name: "glm-4.7"
+    endpoint: "https://api.z.ai/api/coding/paas/v4"
+    custom_model_id: "glm-4.7"
+    target_model_id: "glm-4.7"
+    stream_mode: null
+    active: true
   - name: "deepseek-r1"
     endpoint: "https://api.deepseek.com"
     custom_model_id: "deepseek-reasoner"

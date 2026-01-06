@@ -5,37 +5,66 @@
 Imagine you have a house with many doors. **Nginx Proxy Manager (NPM)** is like a smart doorman that:
 - Opens the correct door for each visitor
 - Handles security (SSL certificates) automatically
-- Lets you use your own domain name instead of fake addresses
+- Lets you use your own domain name (or impersonate existing domains)
 
 **Why use it with Trae-Proxy?**
-- Real SSL certificates (trusted by browsers/IDEs)
-- No need to install certificates manually on your computer
-- Uses your own domain name (e.g., `openai-proxy.yourdomain.com`)
+- Real SSL certificates (trusted by browsers/IDEs) for custom domains
+- Self-signed certificate management for domain impersonation
+- Centralized management for all your proxy needs
 - Simple setup through a web interface
+
+## Two Setup Approaches
+
+| Approach | Domain | SSL Type | Best For |
+|----------|--------|----------|----------|
+| **Custom Domain** | `openai-proxy.yourdomain.com` | Let's Encrypt (real, trusted) | IDEs that support custom base URL |
+| **Domain Impersonation** | `api.openai.com` | Self-signed (requires client install) | IDEs with hardcoded OpenAI endpoint |
+
+> **Not sure which to use?** Check if your IDE allows you to edit the "Base URL" field. If yes, use Custom Domain. If no, use Domain Impersonation.
 
 ---
 
 ## How It Works (The Big Picture)
 
+### Approach A: Custom Domain (Recommended)
+
 ```
-Your Computer (IDE)
+Your IDE (with custom base URL)
        ↓
    [Asks for: openai-proxy.yourdomain.com]
        ↓
-Nginx Proxy Manager (Port 443 - The Doorman)
+Nginx Proxy Manager (Port 443)
        ↓
    [Forwards to: Trae-Proxy on Port 8443]
        ↓
-Trae-Proxy (The Router)
+Trae-Proxy
+       ↓
+   [Sends to: DeepSeek, Kimi, Qwen, etc.]
+```
+
+### Approach B: Domain Impersonation
+
+```
+Your IDE (hardcoded to api.openai.com)
+       ↓
+   [Asks for: api.openai.com]
+       ↓
+Hosts file redirects to YOUR server
+       ↓
+Nginx Proxy Manager (Port 443)
+       ↓
+   [Forwards to: Trae-Proxy on Port 8443]
+       ↓
+Trae-Proxy
        ↓
    [Sends to: DeepSeek, Kimi, Qwen, etc.]
 ```
 
 **Key Points:**
-1. NPM handles the security (HTTPS/SSL)
-2. NPM listens on port 443 (the standard HTTPS port)
-3. Trae-Proxy runs on port 8443 (internal only, not exposed to internet)
-4. Your IDE only talks to NPM - it doesn't know about Trae-Proxy
+1. NPM handles all HTTPS/SSL on port 443
+2. Trae-Proxy runs on port 8443 (internal, not exposed to internet)
+3. Your IDE only talks to NPM - it doesn't know about Trae-Proxy
+4. The "domain" is just a label - can be your domain or `api.openai.com`
 
 ---
 
@@ -132,12 +161,142 @@ Now you can use your new proxy in your IDE:
 
 ---
 
+## Alternative: Domain Impersonation (api.openai.com)
+
+**Use this when:** Your IDE doesn't support custom base URL (hardcoded to `api.openai.com`)
+
+### Step 1: Generate Self-Signed Certificate
+
+Since you don't own `api.openai.com`, you can't use Let's Encrypt. Create a self-signed certificate:
+
+```bash
+# Create certificate directory
+mkdir -p /Users/wharsojo/dev/Trae-Proxy/nginx/certs
+
+# Generate self-signed certificate for api.openai.com
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /Users/wharsojo/dev/Trae-Proxy/nginx/certs/api.openai.com.key \
+  -out /Users/wharsojo/dev/Trae-Proxy/nginx/certs/api.openai.com.crt \
+  -subj "/C=US/ST=State/L=City/O=Organization/CN=api.openai.com"
+
+# Generate CA certificate (for client installation)
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /Users/wharsojo/dev/Trae-Proxy/nginx/certs/ca.key \
+  -out /Users/wharsojo/dev/Trae-Proxy/nginx/certs/ca.crt \
+  -subj "/C=US/ST=State/L=City/O=Organization/CN=Trae-Proxy-CA"
+```
+
+### Step 2: Upload Certificate to NPM
+
+1. Open NPM web interface: `http://your-server-ip:81`
+
+2. Go to **SSL Certificates** tab (in the left menu)
+
+3. Click the **Add SSL Certificate** button (top-right)
+
+4. Fill in the form:
+   - **Name**: `api.openai.com`
+   - Select **Custom** certificate type
+   - **Key**: Paste content of `api.openai.com.key`
+   - **Certificate**: Paste content of `api.openai.com.crt`
+   - Click **Save**
+
+5. Now go to **Proxy Hosts** tab and add a new proxy host:
+
+| Field | What to Enter |
+|-------|---------------|
+| **Domain Names** | `api.openai.com` |
+| **Scheme** | `http` |
+| **Forward Hostname/IP** | `trae-proxy` |
+| **Forward Port** | `8443` |
+| **Cache Assets** | ❌ unchecked |
+| **Block Common Exploits** | ✅ checked |
+
+> **⚠️ Important:** Use `http` scheme for forwarding. Trae-Proxy runs in HTTP mode internally, while NPM handles the external HTTPS connection. |
+
+6. Click on the **SSL** tab:
+   - Select the certificate you just uploaded (`api.openai.com`) from the dropdown
+   - Enable **Force SSL**
+   - Enable **HTTP/2 Support**
+   - Click **Save**
+
+### Step 3: Install CA Certificate on Clients
+
+**Each client machine needs the CA certificate installed:**
+
+**Windows:**
+1. Copy `ca.crt` from server
+2. Double-click → Install Certificate → Local Machine
+3. Place in: Trusted Root Certification Authorities
+
+**macOS:**
+1. Copy `ca.crt` from server
+2. Double-click (opens Keychain Access)
+3. Add to System keychain
+4. Double-click certificate → Trust → Always Trust
+
+**Linux:**
+```bash
+sudo cp ca.crt /usr/local/share/ca-certificates/api.openai.com.crt
+sudo update-ca-certificates
+```
+
+### Step 4: Modify Hosts File on Clients
+
+**Windows (`C:\Windows\System32\drivers\etc\hosts`):**
+```
+YOUR_SERVER_IP api.openai.com
+```
+
+**macOS/Linux (`/etc/hosts`):**
+```
+YOUR_SERVER_IP api.openai.com
+```
+
+### Step 5: Configure IDE & Test
+
+| Setting | Value |
+|---------|-------|
+| **Provider** | OpenAI |
+| **Base URL** | `https://api.openai.com` (leave as-is) |
+| **Model ID** | Your configured model |
+| **API Key** | Your backend API key |
+
+Test:
+```bash
+curl https://api.openai.com/v1/models
+```
+
+---
+
+## Alternative: Manual Certificate Configuration
+
+**If the UI method doesn't work**, you can manually configure certificates:
+
+1. Place certificate files in NPM's SSL directory:
+   ```bash
+   # Copy certificates to NPM's data directory
+   cp api.openai.com.key /Users/wharsojo/dev/Trae-Proxy/nginx/storage/nginx/ssl/api.openai.com.key
+   cp api.openai.com.crt /Users/wharsojo/dev/Trae-Proxy/nginx/storage/nginx/ssl/api.openai.com.crt
+   ```
+
+2. Restart NPM:
+   ```bash
+   cd /Users/wharsojo/dev/Trae-Proxy/nginx
+   docker-compose restart nginx
+   ```
+
+3. Then in the Proxy Host SSL tab, select the certificate from the dropdown
+
+---
+
 ## Domain Requirements
 
-You need a domain name for this to work. Here are your options:
+### For Custom Domain Approach
 
-### Option 1: Buy a Domain (Recommended for long-term)
+You need your own domain name for this to work. Here are your options:
 
+**Option 1: Buy a Domain (Recommended for long-term)**
 - **Namecheap**: https://www.namecheap.com
 - **Cloudflare Registrar**: https://www.cloudflare.com/products/registrar/
 - **GoDaddy**: https://www.godaddy.com
@@ -149,13 +308,17 @@ Name: openai-proxy
 Value: your-server-ip
 ```
 
-### Option 2: Free Dynamic DNS (Good for testing/home servers)
-
+**Option 2: Free Dynamic DNS (Good for testing/home servers)**
 - **Dynu**: https://www.dynu.com/ (Free, no credit card required)
 - **No-IP**: https://www.noip.com/
 - **DuckDNS**: https://www.duckdns.org/
 
-These services give you a free subdomain that points to your changing IP.
+### For Domain Impersonation Approach
+
+**No domain needed!** You're using `api.openai.com` which already exists. You just need to:
+1. Generate self-signed certificates (see above)
+2. Install CA certificate on each client
+3. Modify hosts file on each client
 
 ---
 
