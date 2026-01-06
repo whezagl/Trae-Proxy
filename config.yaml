@@ -1,8 +1,8 @@
-# Trae-Proxy 配置文件
-# 代理域名配置
+# Trae-Proxy configuration file
+# Proxy domain configuration
 domain: api.openai.com
 
-# 后端API配置列表
+# Backend API configuration list
 apis:
   - name: "deepseek-r1"
     endpoint: "https://api.deepseek.com"
@@ -22,7 +22,7 @@ apis:
     target_model_id: "qwen3-coder-plus"
     stream_mode: null
     active: true
-# 代理服务器配置
+# Proxy server configuration
 server:
   port: 443
   debug: true

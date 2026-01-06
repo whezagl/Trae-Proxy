@@ -2,35 +2,35 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# 替换apt源为中国源
+# Replace apt sources with China mirrors
 RUN echo "deb https://mirrors.aliyun.com/debian/ bullseye main non-free contrib" > /etc/apt/sources.list && \
     echo "deb https://mirrors.aliyun.com/debian/ bullseye-updates main non-free contrib" >> /etc/apt/sources.list && \
     echo "deb https://mirrors.aliyun.com/debian-security bullseye-security main non-free contrib" >> /etc/apt/sources.list
 
-# 安装依赖
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# 配置pip使用中国源
+# Configure pip to use China mirrors
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/ && \
     pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn
 
-# 安装Python依赖
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用文件
+# Copy application files
 COPY generate_certs.py .
 COPY trae_proxy.py .
 COPY trae_proxy_cli.py .
 COPY config.yaml .
 
-# 创建证书目录
+# Create certificate directory
 RUN mkdir -p ca
 
-# 暴露8443端口 (HTTP模式，用于反向代理后面)
+# Expose port 8443 (HTTP mode, for use behind reverse proxy)
 EXPOSE 8443
 
-# 设置启动命令 - HTTP模式 (可被docker-compose.yml覆盖)
+# Set startup command - HTTP mode (can be overridden by docker-compose.yml)
 CMD ["python", "trae_proxy_cli.py", "start", "--http-mode", "--port", "8443"]
