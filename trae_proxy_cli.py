@@ -297,12 +297,12 @@ def generate_certificates(domain=None):
         logger.error(f"证书生成失败，返回码: {process.returncode}")
         return False
 
-def start_proxy_server(debug=False):
+def start_proxy_server(debug=False, http_mode=False, port=None):
     """启动代理服务器"""
     config = load_config()
     domain = config.get('domain', 'api.openai.com')
     apis = config.get('apis', [])
-    
+
     # 检查是否有激活的API配置
     active_apis = [api for api in apis if api.get('active', False)]
     if not active_apis:
@@ -313,40 +313,46 @@ def start_proxy_server(debug=False):
         else:
             logger.error("未找到任何API配置")
             return False
-    
+
     logger.info(f"多后端配置已启用，共 {len(apis)} 个API配置，{len(active_apis)} 个激活")
     for api in apis:
         status = "✓ 激活" if api.get('active', False) else "✗ 未激活"
         logger.info(f"  - {api['name']} [{status}]: {api.get('endpoint', '')} -> {api.get('custom_model_id', '')}")
-    
-    # 检查证书文件
-    cert_file = os.path.join("ca", f"{domain}.crt")
-    key_file = os.path.join("ca", f"{domain}.key")
-    
-    if not os.path.exists(cert_file) or not os.path.exists(key_file):
-        logger.error(f"证书文件不存在: {cert_file} 或 {key_file}")
-        logger.info("正在生成证书...")
-        if not generate_certificates(domain):
-            return False
-    
+
     # 构建命令 - 不再传递特定的API参数，让代理服务器根据配置文件自动选择
-    cmd = [
-        sys.executable,
-        "trae_proxy.py",
-        "--cert", cert_file,
-        "--key", key_file
-    ]
-    
+    cmd = [sys.executable, "trae_proxy.py"]
+
+    # HTTP模式不需要证书
+    if http_mode:
+        cmd.append("--http-mode")
+        if port is None:
+            port = 8443
+        logger.info("启动HTTP模式（适用于反向代理后面）")
+    else:
+        # HTTPS模式需要证书
+        cert_file = os.path.join("ca", f"{domain}.crt")
+        key_file = os.path.join("ca", f"{domain}.key")
+
+        if not os.path.exists(cert_file) or not os.path.exists(key_file):
+            logger.error(f"证书文件不存在: {cert_file} 或 {key_file}")
+            logger.info("正在生成证书...")
+            if not generate_certificates(domain):
+                return False
+
+        cmd.extend(["--cert", cert_file, "--key", key_file])
+        if port is None:
+            port = 443
+
+    # 添加端口参数
+    if port is not None:
+        cmd.extend(["--port", str(port)])
+
     if debug or config.get('server', {}).get('debug', False):
         cmd.append("--debug")
-    
-    # 注意：trae_proxy.py 硬编码使用443端口，不支持--port参数
-    # port = config.get('server', {}).get('port', 443)
-    # cmd.extend(["--port", str(port)])
-    
-    logger.info(f"启动多后端代理服务器: {' '.join(cmd)}")
+
+    logger.info(f"启动代理服务器: {' '.join(cmd)}")
     logger.info("代理服务器将根据请求的模型ID自动选择后端API")
-    
+
     # 执行命令
     try:
         process = subprocess.Popen(
@@ -357,27 +363,27 @@ def start_proxy_server(debug=False):
             bufsize=1,
             universal_newlines=True
         )
-        
+
         # 读取输出
         for line in process.stdout:
             print(line.strip())
-        
+
         # 等待进程结束
         process.wait()
-        
+
         if process.returncode != 0:
             logger.error(f"代理服务器异常退出，返回码: {process.returncode}")
             return False
-        
+
         return True
-        
+
     except KeyboardInterrupt:
         logger.info("接收到中断信号，正在停止代理服务器...")
         process.terminate()
         process.wait()
         logger.info("代理服务器已停止")
         return True
-        
+
     except Exception as e:
         logger.error(f"启动代理服务器过程中发生错误: {str(e)}")
         return False
@@ -428,6 +434,8 @@ def main():
     # start命令
     start_parser = subparsers.add_parser('start', help='启动代理服务器')
     start_parser.add_argument('--debug', action='store_true', help='启用调试模式')
+    start_parser.add_argument('--http-mode', action='store_true', help='启用HTTP模式（不使用SSL，用于反向代理后面）')
+    start_parser.add_argument('--port', type=int, help='服务器端口（默认为HTTPS模式443，HTTP模式8443）')
     
     # 解析命令行参数
     args = parser.parse_args()
@@ -459,7 +467,9 @@ def main():
         generate_certificates(args.domain)
     
     elif args.command == 'start':
-        start_proxy_server(args.debug)
+        http_mode = getattr(args, 'http_mode', False)
+        port = getattr(args, 'port', None)
+        start_proxy_server(args.debug, http_mode, port)
     
     else:
         parser.print_help()

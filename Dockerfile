@@ -29,8 +29,8 @@ COPY config.yaml .
 # 创建证书目录
 RUN mkdir -p ca
 
-# 暴露443端口
-EXPOSE 443
+# 暴露8443端口 (HTTP模式，用于反向代理后面)
+EXPOSE 8443
 
-# 设置启动命令
-CMD ["python", "trae_proxy_cli.py", "start"]
+# 设置启动命令 - HTTP模式 (可被docker-compose.yml覆盖)
+CMD ["python", "trae_proxy_cli.py", "start", "--http-mode", "--port", "8443"]

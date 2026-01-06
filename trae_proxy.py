@@ -340,7 +340,7 @@ def chat_completions():
 def main():
     """主函数"""
     global TARGET_API_BASE_URL, CUSTOM_MODEL_ID, TARGET_MODEL_ID, STREAM_MODE, DEBUG_MODE
-    
+
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='Trae代理服务器')
     parser.add_argument('--target-api', help='目标API基础URL')
@@ -350,8 +350,18 @@ def main():
     parser.add_argument('--debug', action='store_true', help='启用调试模式')
     parser.add_argument('--cert', help='证书文件路径')
     parser.add_argument('--key', help='私钥文件路径')
+    parser.add_argument('--http-mode', action='store_true', help='启用HTTP模式（不使用SSL，用于反向代理后面）')
+    parser.add_argument('--port', type=int, help='服务器端口（默认为HTTPS模式443，HTTP模式8443）')
     args = parser.parse_args()
-    
+
+    # 确定运行模式和端口
+    http_mode = args.http_mode
+    port = args.port
+
+    # 如果未指定端口，根据模式设置默认值
+    if port is None:
+        port = 8443 if http_mode else 443
+
     # 更新配置
     if args.target_api:
         TARGET_API_BASE_URL = args.target_api
@@ -367,20 +377,27 @@ def main():
         CERT_FILE = args.cert
     if args.key:
         KEY_FILE = args.key
-    
+
     # 加载多后端配置
     load_multi_backend_config()
-    
-    # 检查证书文件
-    if not os.path.exists(CERT_FILE) or not os.path.exists(KEY_FILE):
-        logger.error(f"证书文件不存在: {CERT_FILE} 或 {KEY_FILE}")
-        logger.info("请先运行 generate_certs.py 生成证书")
-        sys.exit(1)
-    
-    # 创建SSL上下文
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(CERT_FILE, KEY_FILE)
-    
+
+    # HTTP模式不需要证书
+    if http_mode:
+        logger.info("运行在HTTP模式（无SSL）- 适用于反向代理后面")
+        logger.info(f"监听端口: {port}")
+    else:
+        # HTTPS模式需要证书
+        if not os.path.exists(CERT_FILE) or not os.path.exists(KEY_FILE):
+            logger.error(f"证书文件不存在: {CERT_FILE} 或 {KEY_FILE}")
+            logger.info("请先运行 generate_certs.py 生成证书，或使用 --http-mode 启用HTTP模式")
+            sys.exit(1)
+
+        # 创建SSL上下文
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(CERT_FILE, KEY_FILE)
+        logger.info(f"证书文件: {CERT_FILE}")
+        logger.info(f"私钥文件: {KEY_FILE}")
+
     # 打印配置信息
     if MULTI_BACKEND_CONFIG:
         logger.info("多后端模式已启用")
@@ -392,15 +409,20 @@ def main():
         logger.info(f"目标API: {TARGET_API_BASE_URL}")
         logger.info(f"自定义模型ID: {CUSTOM_MODEL_ID}")
         logger.info(f"目标模型ID: {TARGET_MODEL_ID}")
-    
+
     logger.info(f"流模式: {STREAM_MODE}")
     logger.info(f"调试模式: {DEBUG_MODE}")
-    logger.info(f"证书文件: {CERT_FILE}")
-    logger.info(f"私钥文件: {KEY_FILE}")
-    
+
     # 启动服务器
     logger.info("启动代理服务器...")
-    app.run(host='0.0.0.0', port=443, ssl_context=context, threaded=True)
+    if http_mode:
+        # HTTP模式 - 无SSL
+        app.run(host='0.0.0.0', port=port, threaded=True)
+    else:
+        # HTTPS模式 - 使用SSL上下文
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(CERT_FILE, KEY_FILE)
+        app.run(host='0.0.0.0', port=port, ssl_context=context, threaded=True)
 
 if __name__ == "__main__":
     main()

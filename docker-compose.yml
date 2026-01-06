@@ -6,14 +6,18 @@ networks:
 
 services:
   trae-proxy:
-    image: vuldocker/trae-proxy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trae-proxy:local
     container_name: trae-proxy
     networks:
       - nginx_bridges
       - default
     ports:
-      - "443:443"
+      - "127.0.0.1:8443:8443"  # Internal only - accessible from localhost for Nginx proxy
     volumes:
       - ./ca:/app/ca
       - ./config.yaml:/app/config.yaml
     restart: unless-stopped
+    command: ["python", "trae_proxy_cli.py", "start", "--http-mode"]
