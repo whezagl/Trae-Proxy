@@ -122,8 +122,29 @@ You'll need to:
 
 Trae-Proxy uses a YAML format configuration file `config.yaml`:
 
+> **⚠️ Important:** The port and domain settings depend on which deployment option you choose. See the explanation below.
+
+### Which Port Should I Use?
+
+| Deployment Mode | Port Setting | Why? |
+|-----------------|--------------|------|
+| **With Nginx-Proxy-Manager** (Recommended) | `port: 8443` | NPM handles external port 443, Trae-Proxy uses internal port 8443 |
+| **Standalone (Self-Signed)** | `port: 443` | Trae-Proxy directly handles HTTPS on port 443 |
+
+**Simple Explanation:**
+- Think of NPM as a "front desk" that greets visitors at the main door (port 443)
+- Trae-Proxy works in the back room on port 8443
+- NPM passes requests to Trae-Proxy - your IDE never talks to port 8443 directly
+
+### Example Configuration (With Nginx-Proxy-Manager)
+
 ```yaml
 # Trae-Proxy configuration file
+
+# Proxy domain configuration
+# IMPORTANT: Only needed for standalone mode with self-signed SSL
+# When using Nginx-Proxy-Manager, this field is ignored
+domain: api.openai.com
 
 # Backend API configuration list
 apis:
@@ -148,7 +169,9 @@ apis:
 
 # Proxy server configuration
 server:
-  port: 8443  # Use 8443 with NPM, or 443 for standalone
+  # Use port 8443 when using Nginx-Proxy-Manager (recommended)
+  # Use port 443 ONLY for standalone mode (without NPM, with self-signed SSL)
+  port: 8443
   debug: true
 ```
 

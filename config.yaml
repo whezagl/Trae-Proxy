@@ -1,5 +1,8 @@
 # Trae-Proxy configuration file
+
 # Proxy domain configuration
+# IMPORTANT: Only needed for standalone mode with self-signed SSL
+# When using Nginx-Proxy-Manager, this field is ignored (can be left as-is or removed)
 domain: api.openai.com
 
 # Backend API configuration list
@@ -24,5 +27,7 @@ apis:
     active: true
 # Proxy server configuration
 server:
-  port: 443
+  # IMPORTANT: Use port 8443 when using Nginx-Proxy-Manager (recommended)
+  # Use port 443 ONLY for standalone mode (without NPM, with self-signed SSL)
+  port: 8443
   debug: true
